@@ -8,7 +8,7 @@ Share printer USB ke jaringan lokal via TCP/IP (port 9100+). Dibangun dengan Fla
 
 ## Fitur
 
-- **Multi-printer** — support hingga 4 printer USB sekaligus (`/dev/usb/lp0`–`lp3`)
+- **Multi-printer** — support multi printer USB lebih dari 2
 - **Auto-recover** — watchdog restart p910nd otomatis saat printer dinyalakan kembali tanpa cabut USB
 - **Port portable** — setiap printer bisa diset ke port berbeda dari dashboard
 - **Dashboard web** — monitor status, statistik print, dan log aktivitas
@@ -76,7 +76,7 @@ p910nd usbutils sqlite3 curl net-tools iproute2
 ### 1. Clone atau download
 
 ```bash
-git clone https://github.com/yourname/usb-printer-server.git
+git clone https://github.com/mff-28/usb-printer-server.git
 cd usb-printer-server
 ```
 
@@ -102,7 +102,7 @@ Installer akan otomatis:
 
 Buka browser ke:
 ```
-http://IP-SERVER:8080
+http://IP-SERVER:8070
 ```
 
 Login dengan akun yang dibuat saat instalasi.
