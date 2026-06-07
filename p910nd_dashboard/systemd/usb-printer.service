@@ -1,0 +1,90 @@
+[Unit]
+Description=USB Printer Server v3 (Gunicorn + Flask)
+Documentation=https://github.com/your-repo/usb-printer-server
+After=network.target local-fs.target
+Wants=usb-printer-worker.service
+
+[Service]
+Type=notify
+NotifyAccess=main
+
+# ── Identitas ─────────────────────────────────────────────────────────────────
+User=root
+Group=root
+SupplementaryGroups=lp
+
+WorkingDirectory=/opt/usb-printer
+
+# ── Environment ───────────────────────────────────────────────────────────────
+Environment=PATH=/opt/usb-printer/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=SECRET_KEY_FILE=/etc/usb-printer/secret.key
+Environment=AUTH_FILE=/etc/usb-printer/auth.json
+Environment=CONFIG_FILE=/etc/usb-printer/config.json
+Environment=QUEUE_DB=/var/lib/usb-printer/queue.db
+Environment=SPOOL_DIR=/var/spool/usb-printer
+Environment=LOCK_DIR=/run/usb-printer
+Environment=GUNICORN_WORKERS=4
+
+# ── Eksekusi ──────────────────────────────────────────────────────────────────
+ExecStartPre=/bin/mkdir -p /run/usb-printer /var/spool/usb-printer
+ExecStartPre=/bin/chown printer:lp /run/usb-printer /var/spool/usb-printer
+ExecStart=/opt/usb-printer/venv/bin/gunicorn \
+    --config /opt/usb-printer/gunicorn.conf.py \
+    "app:app"
+
+# Trigger auto-start p910nd jika printer sudah terhubung saat service start/reboot
+# Ini menangani kasus: printer nyala, server reboot, atau service restart manual
+ExecStartPost=/bin/bash -c 'sleep 5 && /opt/usb-printer/udev-add.sh service-start || true'
+
+ExecReload=/bin/kill -s HUP $MAINPID
+
+# ── Restart ───────────────────────────────────────────────────────────────────
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# ── Hardening ─────────────────────────────────────────────────────────────────
+# Jalankan dengan privilege minimum
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=false   # False karena Python butuh JIT
+RemoveIPC=true
+
+# Path yang boleh ditulis
+ReadWritePaths=/etc/usb-printer
+ReadWritePaths=/var/lib/usb-printer
+ReadWritePaths=/var/spool/usb-printer
+ReadWritePaths=/run/usb-printer
+
+# Akses device USB printer
+DeviceAllow=/dev/usb/lp0 rw
+DeviceAllow=/dev/usb/lp1 rw
+DeviceAllow=/dev/usb/lp2 rw
+DeviceAllow=/dev/usb/lp3 rw
+DevicePolicy=closed
+
+# ── Resource limits ───────────────────────────────────────────────────────────
+LimitNOFILE=65535
+LimitNPROC=512
+MemoryMax=512M
+CPUQuota=80%
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=usb-printer
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,37 @@
+[Unit]
+Description=USB Printer Watchdog — auto-recover p910nd saat printer power on/off
+Documentation=https://github.com/your-repo/usb-printer-server
+After=usb-printer.service
+BindsTo=usb-printer.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+WorkingDirectory=/opt/usb-printer
+
+Environment=PATH=/opt/usb-printer/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PYTHONUNBUFFERED=1
+Environment=CONFIG_FILE=/etc/usb-printer/config.json
+Environment=LOCK_DIR=/run/usb-printer
+Environment=WATCHDOG_INTERVAL=3
+
+ExecStart=/opt/usb-printer/venv/bin/python3 /opt/usb-printer/watchdog.py
+
+# Restart otomatis jika crash
+Restart=always
+RestartSec=5
+
+# Akses ke device USB printer
+DeviceAllow=/dev/usb/lp0 rw
+DeviceAllow=/dev/usb/lp1 rw
+DeviceAllow=/dev/usb/lp2 rw
+DeviceAllow=/dev/usb/lp3 rw
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=usb-printer-watchdog
+
+[Install]
+WantedBy=multi-user.target

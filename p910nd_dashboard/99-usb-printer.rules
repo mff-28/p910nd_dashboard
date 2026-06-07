@@ -1,0 +1,22 @@
+# /etc/udev/rules.d/99-usb-printer.rules
+# USB Printer Server v3 — udev rules
+
+# ── Printer dicolok ───────────────────────────────────────────────────────────
+# Match via USB class 07 (Printer) sub-class 01
+ACTION=="add", SUBSYSTEM=="usb", ENV{ID_USB_INTERFACES}=="*:070103:*|*:070101:*", \
+    RUN+="/opt/usb-printer/udev-add.sh %k"
+
+# Match langsung ke usblp subsystem (lebih andal)
+ACTION=="add", SUBSYSTEM=="usblp", \
+    RUN+="/opt/usb-printer/udev-add.sh %k"
+
+# ── Printer dicabut ───────────────────────────────────────────────────────────
+ACTION=="remove", SUBSYSTEM=="usb", ENV{ID_USB_INTERFACES}=="*:070103:*|*:070101:*", \
+    RUN+="/opt/usb-printer/udev-remove.sh %k"
+
+ACTION=="remove", SUBSYSTEM=="usblp", \
+    RUN+="/opt/usb-printer/udev-remove.sh %k"
+
+# ── Permissions untuk /dev/usb/lpX ───────────────────────────────────────────
+# Pastikan group lp bisa baca-tulis
+SUBSYSTEM=="usblp", GROUP="lp", MODE="0660"

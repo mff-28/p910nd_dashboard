@@ -1,0 +1,16 @@
+[Unit]
+Description=USB Printer Monitor — record p9100d TCP activities
+After=network.target
+
+[Service]
+Type=simple
+User=printer
+Group=lp
+WorkingDirectory=/opt/usb-printer
+Environment=QUEUE_DB=/var/lib/usb-printer/queue.db
+ExecStart=/opt/usb-printer/venv/bin/python3 /opt/usb-printer/monitor.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

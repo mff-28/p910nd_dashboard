@@ -1,0 +1,17 @@
+# USB Printer Server v3 — Python dependencies
+# Install via: pip install -r requirements.txt
+
+# Web framework
+flask>=3.0,<4
+flask-wtf>=1.2         # CSRF protection
+
+# Password hashing (pbkdf2:sha256)
+werkzeug>=3.0          # sudah include di Flask, tapi explicit lebih baik
+
+# Production WSGI server
+gunicorn>=22.0
+gevent>=24.0           # Async worker untuk concurrency tinggi
+greenlet>=3.0          # Dependency gevent
+
+# systemd journal logging
+systemd-python>=235    # python3-systemd di Debian

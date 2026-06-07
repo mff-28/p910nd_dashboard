@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>USB Printer Server</title>
+  <link rel="stylesheet" href="/static/luci.css">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <style>
+    /* ── Stat grid ── */
+    .stat-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));
+      gap:10px; margin-bottom:20px;
+    }
+    .stat-card {
+      background:var(--bg2); border:1px solid var(--border);
+      border-radius:var(--radius); padding:14px 16px; text-align:center;
+      transition: border-color .2s;
+    }
+    .stat-card:hover { border-color: var(--accent); }
+    .stat-card .stat-val {
+      font-size:28px; font-weight:700; line-height:1.1; margin-bottom:4px;
+      transition: color .4s;
+    }
+    .stat-card .stat-lbl { font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; }
+
+    .stat-card .stat-val { color:var(--text); }
+    #act-today    .stat-val { color:var(--accent); }
+    #act-total    .stat-val { color:var(--text); }
+    #act-printers .stat-val { color:var(--green); }
+    #act-ports    .stat-val { color:var(--yellow); }
+
+    /* ── Printer card ── */
+    .printer-card {
+      background:var(--bg2); border:1px solid var(--border);
+      border-radius:var(--radius); padding:16px; margin-bottom:12px;
+      transition: border-color .2s;
+    }
+    .printer-card:hover { border-color: var(--accent); }
+    .printer-header { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+    .printer-name   { font-weight:600; font-size:14px; flex:1; }
+    .badge {
+      display:inline-flex; align-items:center; gap:4px;
+      padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600;
+    }
+    .badge-running { background:rgba(46,204,113,.15); color:#2ecc71; border:1px solid rgba(46,204,113,.3); }
+    .badge-stopped { background:rgba(150,150,150,.1);  color:var(--text-muted); border:1px solid var(--border); }
+    .badge-offline { background:rgba(231,76,60,.12);   color:var(--red);  border:1px solid rgba(231,76,60,.3); }
+    .badge-error   { background:rgba(231,76,60,.12);   color:var(--red);  border:1px solid rgba(231,76,60,.3); }
+
+    .printer-meta   { display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:var(--text-muted); margin-bottom:12px; }
+    .printer-meta span b { color:var(--text); }
+    .printer-actions { display:flex; gap:8px; flex-wrap:wrap; }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display:none; position:fixed; inset:0;
+      background:rgba(0,0,0,.6); z-index:200;
+      align-items:center; justify-content:center;
+    }
+    .modal-overlay.open { display:flex; }
+    .modal {
+      background:var(--bg2); border:1px solid var(--border);
+      border-radius:10px; padding:24px; width:420px; max-width:95vw;
+      box-shadow:0 20px 60px rgba(0,0,0,.5);
+    }
+    .modal-title {
+      font-size:15px; font-weight:700; margin-bottom:18px;
+      color:var(--accent); border-bottom:1px solid var(--border); padding-bottom:12px;
+    }
+    .form-row { margin-bottom:14px; }
+    .form-row label {
+      display:block; font-size:11px; text-transform:uppercase;
+      letter-spacing:.5px; color:var(--text-muted); margin-bottom:6px; font-weight:600;
+    }
+    .form-row input[type="number"],
+    .form-row input[type="text"],
+    .form-row select {
+      width:100%; background:var(--bg3); border:1px solid var(--border);
+      color:var(--text); border-radius:var(--radius);
+      padding:8px 10px; font-size:13px; font-family:inherit;
+      transition: border-color .15s;
+    }
+    .form-row input:focus,
+    .form-row select:focus { outline:none; border-color:var(--accent); }
+    .form-row input.input-readonly { opacity:.6; cursor:default; }
+    .form-row .form-hint { font-size:11px; color:var(--text-muted); margin-top:5px; }
+    .form-row .checkbox-row { display:flex; align-items:center; gap:8px; }
+    .form-row .checkbox-row input[type="checkbox"] { width:auto; accent-color:var(--accent); }
+    .modal-footer {
+      display:flex; gap:8px; justify-content:flex-end;
+      margin-top:20px; padding-top:14px; border-top:1px solid var(--border);
+    }
+
+    /* ── Port select pills ── */
+    .port-pills { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+    .port-pill {
+      padding:4px 10px; border-radius:20px; font-size:11px; cursor:pointer;
+      border:1px solid var(--border); background:var(--bg3); color:var(--text-muted);
+      transition: all .15s; user-select:none;
+    }
+    .port-pill:hover { border-color:var(--accent); color:var(--accent); }
+    .port-pill.active { background:var(--accent2); border-color:var(--accent); color:#fff; }
+
+    /* ── Log box ── */
+    .log-box {
+      background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius);
+      padding:12px 14px; font-family:monospace; font-size:11px; line-height:1.6;
+      max-height:400px; overflow-y:auto; white-space:pre-wrap; word-break:break-all;
+    }
+
+    /* ── Last activity compact ── */
+    #act-last-wrap {
+      background:var(--bg2); border:1px solid var(--border);
+      border-radius:var(--radius); padding:10px 14px; margin-bottom:20px;
+      font-size:12px; color:var(--text-muted);
+    }
+    #act-last-wrap b { color:var(--text); }
+
+    /* ── Spinner ── */
+    .spinning { animation: spin .8s linear infinite; display:inline-block; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    @media (max-width:600px) {
+      .stat-grid { grid-template-columns:repeat(2,1fr); }
+      .printer-actions { gap:6px; }
+      .btn { padding:6px 10px; font-size:12px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div id="header">
+  <div id="logo">
+    <span class="logo-icon">⬡</span>
+    <span class="logo-text">USB Printer Server</span>
+    <span class="logo-sub">v3</span>
+  </div>
+  <div id="header-right">
+    <span class="header-user">👤 {{ username }}</span>
+    <span id="clock">--:--:--</span>
+    <button class="btn-icon" onclick="refreshAll()" title="Refresh">↻</button>
+    <a href="/logout" class="btn-logout" title="Logout">⏻</a>
+  </div>
+</div>
+
+<!-- Tab Bar -->
+<div id="tabbar">
+  <button class="tab active"  onclick="showTab('tab-dashboard',this)">Dashboard</button>
+  <button class="tab"         onclick="showTab('tab-printers', this)">Printer Manager</button>
+  <button class="tab"         onclick="showTab('tab-logs',     this)">System Log</button>
+</div>
+
+<!-- Content -->
+<div id="content">
+
+  <!-- ===== TAB: DASHBOARD ===== -->
+  <div id="tab-dashboard" class="tab-content active">
+    <div class="section-title">Ringkasan Sistem</div>
+
+    <!-- Print activity stats -->
+    <div class="stat-grid" style="margin-top:8px;">
+      <div class="stat-card" id="act-today">
+        <div class="stat-val" id="v-today">—</div>
+        <div class="stat-lbl">Total Hari Ini</div>
+      </div>
+      <div class="stat-card" id="act-total">
+        <div class="stat-val" id="v-total">—</div>
+        <div class="stat-lbl">Total Keseluruhan</div>
+      </div>
+      <div class="stat-card" id="act-printers">
+        <div class="stat-val" id="v-printers">—</div>
+        <div class="stat-lbl">Printer Aktif (24h)</div>
+      </div>
+      <div class="stat-card" id="act-ports">
+        <div class="stat-val" id="v-ports">—</div>
+        <div class="stat-lbl">Port Aktif (24h)</div>
+      </div>
+    </div>
+
+    <!-- Last activity -->
+    <div id="act-last-wrap">
+      Aktivitas Terakhir: <b id="v-last">—</b>
+    </div>
+
+    <!-- Printer status cards -->
+    <div class="section-title" style="margin-top:4px;">Status Printer</div>
+    <div id="dashboard-printers">
+      <div class="loading">Memuat data…</div>
+    </div>
+  </div>
+
+  <!-- ===== TAB: PRINTER MANAGER ===== -->
+  <div id="tab-printers" class="tab-content">
+    <div class="section-title">Printer Manager</div>
+    <div id="printer-list">
+      <div class="loading">Memuat…</div>
+    </div>
+    <div style="margin-top:14px;">
+      <button class="btn btn-default" onclick="loadPrinters()">↻ Refresh</button>
+    </div>
+  </div>
+
+  <!-- ===== TAB: SYSTEM LOG ===== -->
+  <div id="tab-logs" class="tab-content">
+    <div class="section-title">System Log (journald)</div>
+    <div style="margin-bottom:10px;">
+      <button class="btn btn-default" onclick="loadLogs()">↻ Refresh</button>
+    </div>
+    <div id="log-box" class="log-box"><span class="muted">Memuat log…</span></div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<!-- ===== MODAL KONFIGURASI PRINTER ===== -->
+<div id="modal-overlay" class="modal-overlay" onclick="closeModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title" id="modal-title">⚙ Konfigurasi Printer</div>
+    <div class="modal-body">
+      <input type="hidden" id="cfg-device">
+
+      <div class="form-row">
+        <label>Device</label>
+        <input type="text" id="cfg-device-display" readonly class="input-readonly">
+      </div>
+
+      <div class="form-row">
+        <label>Port TCP</label>
+        <input type="number" id="cfg-port" min="9100" max="9110" value="9100"
+               oninput="syncPortPills(this.value)">
+        <div class="port-pills" id="port-pills">
+          <!-- diisi JS -->
+        </div>
+        <div class="form-hint">Range 9100–9110 · Tiap printer harus pakai port berbeda</div>
+      </div>
+
+      <div class="form-row">
+        <label>Mode Koneksi</label>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cfg-bidi">
+          <span>Bidirectional (untuk printer yang mendukung status balik)</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-default" onclick="closeModal()">Batal</button>
+      <button class="btn btn-primary" onclick="applyConfig()">💾 Simpan &amp; Mulai</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CSRF ──────────────────────────────────────────────────────────────────────
+const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+
+async function api(url, method='GET', body=null) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(url, opts);
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`${r.status}: ${t}`);
+  }
+  return r.json();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function toast(msg, type='info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast show ${type}`;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.className = 'toast', 3500);
+}
+
+// ── Tab ───────────────────────────────────────────────────────────────────────
+function showTab(id, btn) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (id === 'tab-logs') loadLogs();
+}
+
+// ── Clock ─────────────────────────────────────────────────────────────────────
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('id-ID');
+}
+setInterval(updateClock, 1000); updateClock();
+
+// ── Animated counter ─────────────────────────────────────────────────────────
+// Animasi angka naik ke target secara smooth
+function animateCount(el, target) {
+  const current = parseInt(el.textContent) || 0;
+  if (isNaN(target) || el.textContent === '—') {
+    el.textContent = target;
+    return;
+  }
+  if (current === target) return;
+  const diff = target - current;
+  const steps = Math.min(Math.abs(diff), 20);
+  const step = diff / steps;
+  let val = current;
+  let i = 0;
+  const iv = setInterval(() => {
+    i++;
+    val += step;
+    el.textContent = Math.round(i < steps ? val : target);
+    if (i >= steps) clearInterval(iv);
+  }, 30);
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  // Printer status
+  try {
+    const d = await api('/api/dashboard');
+    const container = document.getElementById('dashboard-printers');
+    if (!d.printers || !d.printers.length) {
+      container.innerHTML = '<div class="muted">Tidak ada printer USB terdeteksi.</div>';
+    } else {
+      container.innerHTML = d.printers.map(p => {
+        const badgeCls   = badgeClass(p.status);
+        const statusLbl  = statusLabel(p.status);
+        return `
+          <div class="printer-card">
+            <div class="printer-header">
+              <div class="printer-name">${escHtml(p.name)}</div>
+              <span class="badge ${badgeCls}">${statusLbl}</span>
+            </div>
+            <div class="printer-meta">
+              <span><b>Device:</b> ${escHtml(p.device)}</span>
+              <span><b>Port:</b> :${p.port}</span>
+            </div>
+          </div>`;
+      }).join('');
+    }
+  } catch(e) {
+    console.error('loadDashboard printers:', e);
+  }
+
+  // Print activity summary
+  try {
+    const a = await api('/api/print-activity/summary');
+    animateCount(document.getElementById('v-today'),    parseInt(a.total_today) || 0);
+    animateCount(document.getElementById('v-total'),    parseInt(a.total_all)   || 0);
+    animateCount(document.getElementById('v-printers'), parseInt(a.printers_active) || 0);
+    animateCount(document.getElementById('v-ports'),    parseInt(a.ports_active)    || 0);
+
+    if (a.last_activity && a.last_activity.length) {
+      const la = a.last_activity[0];
+      const t  = new Date(la.timestamp).toLocaleString('id-ID');
+      document.getElementById('v-last').textContent = `${t} · ${la.client_ip} → :${la.printer_port} (${la.printer_device})`;
+    } else {
+      document.getElementById('v-last').textContent = '—';
+    }
+  } catch(e) {
+    console.warn('activity summary error', e);
+  }
+}
+
+// ── Printers ──────────────────────────────────────────────────────────────────
+async function loadPrinters() {
+  try {
+    const d = await api('/api/printers');
+    const el = document.getElementById('printer-list');
+    if (!d.printers || !d.printers.length) {
+      el.innerHTML = '<div class="muted">Tidak ada printer USB terdeteksi.</div>';
+      return;
+    }
+    el.innerHTML = d.printers.map(p => {
+      const bCls  = badgeClass(p.status);
+      const bLbl  = statusLabel(p.status);
+      // simpan port & bidi di data attribute supaya start pakai port yang benar
+      const dev   = escHtml(p.device);
+      const port  = parseInt(p.port) || 9100;
+      const bidi  = p.bidirectional ? 'true' : 'false';
+      return `
+        <div class="printer-card">
+          <div class="printer-header">
+            <div class="printer-name">${escHtml(p.name)}</div>
+            <span class="badge ${bCls}">${bLbl}</span>
+          </div>
+          <div class="printer-meta">
+            <span><b>Device:</b> ${dev}</span>
+            <span><b>USB ID:</b> ${escHtml(p.usb_id||'—')}</span>
+            <span><b>Port:</b> :${port}</span>
+            ${p.serial ? `<span><b>S/N:</b> ${escHtml(p.serial)}</span>` : ''}
+          </div>
+          <div class="printer-actions">
+            <button class="btn btn-success"
+              onclick="startPrinter('${dev}', ${port}, ${bidi})">▶ Start</button>
+            <button class="btn btn-danger"
+              onclick="stopPrinter('${dev}')">■ Stop</button>
+            <button class="btn btn-default"
+              onclick="restartPrinter('${dev}')">↻ Restart</button>
+            <button class="btn btn-default"
+              onclick="openConfig('${dev}', ${port}, ${bidi})">⚙ Konfigurasi</button>
+          </div>
+        </div>`;
+    }).join('');
+  } catch(e) {
+    toast('Gagal memuat daftar printer: ' + e.message, 'error');
+  }
+}
+
+// Start pakai port yang tersimpan (bukan hardcode 9100)
+async function startPrinter(device, port, bidirectional) {
+  try {
+    const d = await api('/api/start', 'POST', { device, port: port || 9100, bidirectional: bidirectional || false });
+    toast(d.message, d.success ? 'ok' : 'error');
+    setTimeout(() => { loadPrinters(); loadDashboard(); }, 1500);
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+async function stopPrinter(device) {
+  try {
+    const d = await api('/api/stop', 'POST', { device });
+    toast(d.message, d.success ? 'ok' : 'error');
+    setTimeout(() => { loadPrinters(); loadDashboard(); }, 1500);
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+async function restartPrinter(device) {
+  try {
+    const d = await api('/api/restart', 'POST', { device });
+    toast(d.message, d.success ? 'ok' : 'error');
+    setTimeout(() => { loadPrinters(); loadDashboard(); }, 2000);
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// ── Modal Konfigurasi ─────────────────────────────────────────────────────────
+const PORTS = [9100, 9101, 9102, 9103, 9104, 9105, 9106, 9107, 9108, 9109, 9110];
+
+function buildPortPills(activePort) {
+  const container = document.getElementById('port-pills');
+  container.innerHTML = PORTS.map(p => `
+    <span class="port-pill ${p === activePort ? 'active' : ''}"
+          onclick="selectPort(${p})">:${p}</span>
+  `).join('');
+}
+
+function selectPort(port) {
+  document.getElementById('cfg-port').value = port;
+  document.querySelectorAll('.port-pill').forEach(el => {
+    el.classList.toggle('active', parseInt(el.dataset.port || el.textContent.replace(':','')) === port);
+  });
+  // update active state properly
+  document.querySelectorAll('.port-pill').forEach(el => {
+    const pVal = PORTS.find(p => el.textContent.trim() === ':'+p);
+    el.classList.toggle('active', pVal === port);
+  });
+}
+
+function syncPortPills(val) {
+  const port = parseInt(val);
+  document.querySelectorAll('.port-pill').forEach(el => {
+    const pVal = PORTS.find(p => el.textContent.trim() === ':'+p);
+    el.classList.toggle('active', pVal === port);
+  });
+}
+
+function openConfig(device, port, bidi) {
+  const p = parseInt(port) || 9100;
+  document.getElementById('cfg-device').value         = device;
+  document.getElementById('cfg-device-display').value = device;
+  document.getElementById('cfg-port').value           = p;
+  document.getElementById('cfg-bidi').checked         = bidi === true || bidi === 'true';
+  document.getElementById('modal-title').textContent  = '⚙ Konfigurasi: ' + device;
+  buildPortPills(p);
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+async function applyConfig() {
+  const device = document.getElementById('cfg-device').value;
+  const port   = parseInt(document.getElementById('cfg-port').value);
+  const bidi   = document.getElementById('cfg-bidi').checked;
+  if (!device || port < 9100 || port > 9110) {
+    toast('Port tidak valid (9100–9110)', 'error'); return;
+  }
+  closeModal();
+  try {
+    const d = await api('/api/start', 'POST', { device, port, bidirectional: bidi });
+    toast(d.message, d.success ? 'ok' : 'error');
+    setTimeout(() => { loadPrinters(); loadDashboard(); }, 1500);
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// ── Logs ──────────────────────────────────────────────────────────────────────
+async function loadLogs() {
+  try {
+    const d  = await api('/api/logs');
+    const el = document.getElementById('log-box');
+    if (!d.logs || !d.logs.length) {
+      el.innerHTML = '<span class="muted">Tidak ada log.</span>';
+      return;
+    }
+    el.textContent = d.logs.join('\n');
+    el.scrollTop   = el.scrollHeight;
+  } catch(e) {
+    document.getElementById('log-box').textContent = 'Gagal memuat log: ' + e.message;
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function badgeClass(status) {
+  return { running:'badge-running', stopped:'badge-stopped',
+           offline:'badge-offline', error:'badge-error' }[status] || 'badge-stopped';
+}
+function statusLabel(status) {
+  return { running:'● Berjalan', stopped:'○ Berhenti',
+           offline:'✕ Offline', error:'⚠ Error' }[status] || status;
+}
+function escHtml(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+         .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Auto-refresh ──────────────────────────────────────────────────────────────
+function refreshAll() {
+  loadDashboard();
+  if (document.getElementById('tab-printers').classList.contains('active')) loadPrinters();
+}
+
+// Init
+loadDashboard();
+loadPrinters();
+setInterval(loadDashboard, 10000); // refresh tiap 10 detik
+</script>
+</body>
+</html>

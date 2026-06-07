@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — USB Printer Server</title>
+  <link rel="stylesheet" href="/static/luci.css">
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+    .login-wrap { width:340px; }
+    .login-logo { text-align:center; margin-bottom:28px; }
+    .login-logo .logo-icon { font-size:36px; color:var(--accent); display:block; margin-bottom:8px; }
+    .login-logo .logo-text { font-size:18px; font-weight:700; }
+    .login-logo .logo-sub  { color:var(--text-muted); font-size:12px; }
+    .login-box {
+      background:var(--bg2); border:1px solid var(--border);
+      border-radius:var(--radius); padding:28px 24px;
+    }
+    .login-box h2 {
+      font-size:13px; color:var(--text-muted); text-transform:uppercase;
+      letter-spacing:1px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:10px;
+    }
+    .login-field { margin-bottom:14px; }
+    .login-field label { display:block; font-size:11px; color:var(--text-muted); margin-bottom:5px; }
+    .login-field input {
+      width:100%; background:var(--bg3); border:1px solid var(--border);
+      border-radius:var(--radius); color:var(--text); padding:8px 12px;
+      font-size:13px; font-family:inherit; outline:none; transition:border-color .15s;
+      box-sizing:border-box;
+    }
+    .login-field input:focus { border-color:var(--accent); }
+    .login-btn {
+      width:100%; background:var(--accent2); color:#fff; border:none;
+      border-radius:var(--radius); padding:9px; font-size:13px; font-weight:600;
+      cursor:pointer; margin-top:8px; transition:background .15s; font-family:inherit;
+    }
+    .login-btn:hover { background:var(--accent); }
+    .login-error {
+      background:rgba(231,76,60,.12); border:1px solid rgba(231,76,60,.3);
+      color:var(--red); border-radius:var(--radius); padding:8px 12px;
+      font-size:12px; margin-bottom:14px;
+    }
+    .login-info {
+      background:rgba(0,180,216,.1); border:1px solid rgba(0,180,216,.3);
+      color:var(--accent); border-radius:var(--radius); padding:8px 12px;
+      font-size:12px; margin-bottom:14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-logo">
+      <span class="logo-icon">⬡</span>
+      <div class="logo-text">USB Printer Server</div>
+      <div class="logo-sub">v3 — Debian Edition</div>
+    </div>
+    <div class="login-box">
+      <h2>Masuk ke Sistem</h2>
+
+      {% if error == 'invalid' %}
+        <div class="login-error">Username atau password salah.</div>
+      {% elif error == 'setup' %}
+        <div class="login-info">
+          Belum ada akun. Buat akun pertama:<br>
+          <code style="font-size:11px;">sudo python3 /opt/usb-printer/manage.py adduser</code>
+        </div>
+      {% endif %}
+
+      <form method="POST" action="/login" autocomplete="on">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="login-field">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username"
+                 autocomplete="username" required autofocus
+                 maxlength="32" pattern="[a-zA-Z0-9_\-]{3,32}">
+        </div>
+        <div class="login-field">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password"
+                 autocomplete="current-password" required maxlength="256">
+        </div>
+        <button type="submit" class="login-btn">Masuk →</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

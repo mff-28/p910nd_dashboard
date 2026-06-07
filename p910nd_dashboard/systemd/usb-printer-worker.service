@@ -1,0 +1,46 @@
+[Unit]
+Description=USB Printer Queue Worker
+Documentation=https://github.com/your-repo/usb-printer-server
+After=usb-printer.service
+BindsTo=usb-printer.service
+
+[Service]
+Type=simple
+User=printer
+Group=lp
+SupplementaryGroups=lp
+
+WorkingDirectory=/opt/usb-printer
+
+Environment=PATH=/opt/usb-printer/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PYTHONUNBUFFERED=1
+Environment=QUEUE_DB=/var/lib/usb-printer/queue.db
+Environment=SPOOL_DIR=/var/spool/usb-printer
+Environment=LOCK_DIR=/run/usb-printer
+Environment=CONFIG_FILE=/etc/usb-printer/config.json
+
+ExecStart=/opt/usb-printer/venv/bin/python3 /opt/usb-printer/worker.py
+
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/usb-printer /var/spool/usb-printer /run/usb-printer /etc/usb-printer
+DeviceAllow=/dev/usb/lp0 rw
+DeviceAllow=/dev/usb/lp1 rw
+DeviceAllow=/dev/usb/lp2 rw
+DeviceAllow=/dev/usb/lp3 rw
+DevicePolicy=closed
+
+LimitNOFILE=4096
+MemoryMax=128M
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=usb-printer-worker
+
+[Install]
+WantedBy=multi-user.target
